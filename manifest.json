@@ -1,10 +1,10 @@
 {
-  "name": "60min Fullbody Timer",
-  "short_name": "FullbodyTimer",
+  "name": "Gym Assistant",
+  "short_name": "GymAssist",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#0f1720",
-  "theme_color": "#111111",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "icons": [
     {
       "src": "icon-192.png",
