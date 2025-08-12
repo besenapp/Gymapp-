@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>60‑Min Fullbody Timer</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111111">
+<style>
+  :root{--bg:#0f1720;--card:#0b1220;--muted:#9aa4b2;--accent:#ffffff}
+  html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--accent);-webkit-font-smoothing:antialiased}
+  .wrap{max-width:760px;margin:14px auto;padding:12px}
+  h1{font-size:18px;margin:6px 0 12px;letter-spacing:0.3px}
+  .bar{display:flex;gap:8px;align-items:center}
+  button{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--accent);padding:10px 12px;border-radius:8px;font-size:15px}
+  .big{font-size:16px;padding:12px 14px}
+  .small{font-size:13px;color:var(--muted)}
+  #timeline{margin-top:12px}
+  .row{display:flex;gap:10px;align-items:center;padding:8px;border-radius:8px}
+  .time{width:62px;font-weight:600;color:var(--muted)}
+  .event{flex:1;background:transparent;padding:8px;border-radius:6px}
+  .active{box-shadow:0 6px 20px rgba(0,0,0,0.6);background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent)}
+  #controls{display:flex;gap:8px;margin-top:12px;align-items:center}
+  #log{margin-top:14px;background:var(--card);padding:10px;border-radius:10px}
+  table{width:100%;border-collapse:collapse;color:var(--muted);font-size:13px}
+  th,td{padding:6px;text-align:left}
+  #modal{position:fixed;left:0;top:0;width:100%;height:100%;display:none;align-items:center;justify-content:center;background:rgba(2,6,23,0.7)}
+  .card{background:linear-gradient(180deg,#0b1220,#07101a);padding:14px;border-radius:12px;min-width:300px}
+  input[type=number]{width:100%;padding:8px;margin-top:6px;background:#01060a;border:1px solid rgba(255,255,255,0.03);color:var(--accent);border-radius:6px}
+  .controls-modal{display:flex;gap:8px;justify-content:space-between;margin-top:12px}
+  a.smalllink{color:var(--muted);font-size:13px;text-decoration:none}
+  footer{margin-top:10px;color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>60‑Min Fullbody • Timer</h1>
+  <div class="bar">
+    <button id="startBtn" class="big">Start</button>
+    <button id="pauseBtn" disabled>Pause</button>
+    <button id="backBtn" disabled>Zurück</button>
+    <div style="margin-left:auto" class="small">Tap an Aktivität für Log</div>
+  </div>
+
+  <div id="timeline"></div>
+
+  <div id="controls">
+    <button id="exportBtn">Export CSV</button>
+    <button id="clearBtn">Clear Logs</button>
+    <label style="margin-left:auto" class="small">Ton <input id="soundToggle" type="checkbox" checked></label>
+  </div>
+
+  <div id="log" aria-live="polite">
+    <h3 class="small">Protokoll</h3>
+    <table id="logTable"><thead><tr><th>Zeit</th><th>Übung</th><th>Gewicht</th><th>Wdh.</th><th></th></tr></thead><tbody></tbody></table>
+  </div>
+
+  <footer>Installierbar: <span class="small">Safari → Teilen → "Zum Home‑Bildschirm"</span></footer>
+</div>
+
+<div id="modal">
+  <div class="card">
+    <div id="modalTitle" style="font-weight:700"></div>
+    <div class="small" id="modalTime"></div>
+    <label class="small">Gewicht (kg)
+      <input id="weightInput" type="number" step="0.5" min="0" />
+    </label>
+    <label class="small">Wdh.
+      <input id="repsInput" type="number" step="1" min="0" />
+    </label>
+    <div class="controls-modal">
+      <button id="saveBtn">Speichern</button>
+      <button id="skipBtn">Überspringen</button>
+    </div>
+  </div>
+</div>
+
+<audio id="ping"><source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
+
+<script>
+const EVENTS = [
+  {m:0, label:'Warm‑up (3–4 min Cardio + Mobilität)'},
+  {m:5, label:'Beinpresse/Kniebeugen — Aufwärmsatz'},
+  {m:6, label:'Pause'},
+  {m:7, label:'Beinpresse/Kniebeugen — Arbeitssatz 1'},
+  {m:10, label:'Pause (3 min)'},
+  {m:13, label:'Beinpresse/Kniebeugen — Arbeitssatz 2'},
+  {m:14, label:'Beincurl Maschine — Aufwärmsatz'},
+  {m:15, label:'Beincurl — Arbeitssatz 1'},
+  {m:18, label:'Pause (3 min)'},
+  {m:21, label:'Bankdrücken — Aufwärmsatz'},
+  {m:22, label:'Pause'},
+  {m:23, label:'Bankdrücken — Arbeitssatz 1'},
+  {m:26, label:'Pause (3 min)'},
+  {m:29, label:'Superset1 Rudern → Schrägbank KH — Satz 1'},
+  {m:32, label:'Superset1 Rudern → Schrägbank KH — Satz 2'},
+  {m:37, label:'Superset2 Schulterdrücken → Trizeps — Satz 1'},
+  {m:40, label:'Superset2 Schulterdrücken → Trizeps — Satz 2'},
+  {m:45, label:'Superset3 Seitheben → SZ‑Curls — Satz 1'},
+  {m:48, label:'Superset3 Seitheben → SZ‑Curls — Satz 2'},
+  {m:53, label:'Plank (40–60s)'},
+  {m:55, label:'Hanging Leg Raises (8–12)'},
+  {m:58, label:'Cooldown (Dehnen)'}
+];
+
+const timelineEl = document.getElementById('timeline');
+const startBtn = document.getElementById('startBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const backBtn = document.getElementById('backBtn');
+const modal = document.getElementById('modal');
+const modalTitle = document.getElementById('modalTitle');
+const modalTime = document.getElementById('modalTime');
+const weightInput = document.getElementById('weightInput');
+const repsInput = document.getElementById('repsInput');
+const saveBtn = document.getElementById('saveBtn');
+const skipBtn = document.getElementById('skipBtn');
+const logTbody = document.querySelector('#logTable tbody');
+const exportBtn = document.getElementById('exportBtn');
+const clearBtn = document.getElementById('clearBtn');
+const ping = document.getElementById('ping');
+const soundToggle = document.getElementById('soundToggle');
+
+let timers = [];
+let startTime = null;
+let paused = false;
+let pauseOffset = 0; // ms paused total
+let pauseStart = 0;
+let currentEventIndex = 0;
+
+function renderTimeline(){
+  timelineEl.innerHTML = '';
+  EVENTS.forEach((e, i) => {
+    const div = document.createElement('div');
+    div.className = 'row';
+    div.innerHTML = `<div class="time">${formatMins(e.m)}</div><div class="event" data-index="${i}">${e.label}</div>`;
+    timelineEl.appendChild(div);
+    div.querySelector('.event').onclick = ()=>openManualLog(i);
+  });
+}
+function formatMins(m){
+  return `${m}:00`;
+}
+
+async function notify(title, body){
+  if("Notification" in window && Notification.permission === "granted"){
+    try{ new Notification(title, {body}); }catch(e){}
+  }
+  if(soundToggle.checked){ try{ ping.currentTime=0; ping.play().catch(()=>{}); }catch(e){} }
+  if(navigator.vibrate){ navigator.vibrate(90); }
+}
+
+function scheduleEvents(){
+  clearTimers();
+  const base = startTime;
+  EVENTS.forEach((ev, idx) => {
+    const delay = ev.m*60*1000 - pauseOffset;
+    const t = setTimeout(()=>triggerEvent(idx), Math.max(0, delay));
+    timers.push({id:t, idx, scheduled: base + ev.m*60*1000});
+  });
+}
+
+function startWorkout(){
+  if(startBtn.disabled) return;
+  startTime = Date.now();
+  pauseOffset = 0;
+  paused = false;
+  currentEventIndex = 0;
+  scheduleEvents();
+  startBtn.disabled = true;
+  pauseBtn.disabled = false;
+  backBtn.disabled = false;
+  if("Notification" in window && Notification.permission !== "granted"){
+    Notification.requestPermission().then(()=>{});
+  }
+}
+
+function clearTimers(){
+  timers.forEach(t=>clearTimeout(t.id));
+  timers = [];
+}
+
+function pauseWorkout(){
+  if(paused){
+    // resume
+    const resumedAt = Date.now();
+    pauseOffset += (resumedAt - pauseStart);
+    paused = false;
+    scheduleEvents();
+    pauseBtn.textContent = 'Pause';
+  } else {
+    // pause
+    pauseStart = Date.now();
+    paused = true;
+    clearTimers();
+    pauseBtn.textContent = 'Weiter';
+  }
+}
+
+function backStep(){
+  // go to previous event: cancel, set startTime such that previous event will fire immediately
+  if(currentEventIndex <= 0) {
+    // restart whole workout
+    startTime = Date.now();
+    pauseOffset = 0;
+    clearTimers();
+    scheduleEvents();
+    currentEventIndex = 0;
+    return;
+  }
+  currentEventIndex = Math.max(0, currentEventIndex-1);
+  // compute new startTime so that EVENTS[currentEventIndex].m is 'now' minus small offset
+  const now = Date.now();
+  startTime = now - EVENTS[currentEventIndex].m*60*1000 - pauseOffset;
+  clearTimers();
+  scheduleEvents();
+  // trigger it immediately to open modal
+  setTimeout(()=>triggerEvent(currentEventIndex), 50);
+}
+
+function triggerEvent(idx){
+  currentEventIndex = idx;
+  const ev = EVENTS[idx];
+  notify('Nächster Schritt', `${formatMins(ev.m)} — ${ev.label}`);
+  flashTimeline(idx);
+  const lower = ev.label.toLowerCase();
+  if(lower.includes('pause') || lower.includes('warm') || lower.includes('cooldown') || lower.includes('plank')) {
+    return;
+  }
+  // open modal
+  modalTitle.textContent = ev.label;
+  modalTime.textContent = `Minute ${ev.m}`;
+  weightInput.value = '';
+  repsInput.value = '';
+  modal.style.display = 'flex';
+  weightInput.focus();
+}
+
+function flashTimeline(idx){
+  const node = timelineEl.querySelector(`[data-index="${idx}"]`);
+  if(!node) return;
+  node.classList.add('active');
+  setTimeout(()=>node.classList.remove('active'),900);
+}
+
+function openManualLog(idx){
+  currentEventIndex = idx;
+  const ev = EVENTS[idx];
+  modalTitle.textContent = ev.label;
+  modalTime.textContent = `Minute ${ev.m}`;
+  weightInput.value = '';
+  repsInput.value = '';
+  modal.style.display = 'flex';
+  weightInput.focus();
+}
+
+function saveEntry(){
+  const ev = EVENTS[currentEventIndex];
+  const weight = parseFloat(weightInput.value || 0) || null;
+  const reps = parseInt(repsInput.value || 0) || null;
+  const entry = { timeMin: ev.m, label: ev.label, weight, reps, timestamp: new Date().toISOString() };
+  const logs = loadLogs(); logs.push(entry); localStorage.setItem('workout_logs_v1', JSON.stringify(logs));
+  modal.style.display = 'none';
+  renderLogs();
+}
+
+function loadLogs(){
+  try{ return JSON.parse(localStorage.getItem('workout_logs_v1')||'[]'); }catch(e){ return []; }
+}
+function renderLogs(){
+  const logs = loadLogs();
+  logTbody.innerHTML = '';
+  logs.forEach((l,i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${formatMins(l.timeMin)}</td><td>${l.label}</td><td>${l.weight ?? ''}</td><td>${l.reps ?? ''}</td><td><button data-i="${i}" class="delBtn">X</button></td>`;
+    logTbody.appendChild(tr);
+  });
+  document.querySelectorAll('.delBtn').forEach(btn=>{
+    btn.onclick = ()=>{ const i = parseInt(btn.dataset.i); const arr = loadLogs(); arr.splice(i,1); localStorage.setItem('workout_logs_v1', JSON.stringify(arr)); renderLogs(); };
+  });
+}
+
+function exportCSV(){
+  const logs = loadLogs();
+  if(!logs.length){ alert('Keine Einträge.'); return; }
+  const rows = [['timeMin','label','weight','reps','timestamp']];
+  logs.forEach(l=>rows.push([l.timeMin, l.label, l.weight, l.reps, l.timestamp]));
+  const csv = rows.map(r => r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='workout_logs.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+startBtn.onclick = ()=>{ startWorkout(); };
+pauseBtn.onclick = ()=>{ pauseWorkout(); };
+backBtn.onclick = ()=>{ backStep(); };
+saveBtn.onclick = saveEntry;
+skipBtn.onclick = ()=>{ modal.style.display='none'; };
+exportBtn.onclick = exportCSV;
+clearBtn.onclick = ()=>{ if(confirm('Logs löschen?')){ localStorage.removeItem('workout_logs_v1'); renderLogs(); } };
+
+window.onclick = (e)=>{ if(e.target===modal) modal.style.display='none'; };
+
+renderTimeline();
+renderLogs();
+
+// enable buttons at start (so user can pre-install and test)
+startBtn.disabled = false;
+pauseBtn.disabled = true;
+backBtn.disabled = true;
+startBtn.addEventListener('click', ()=>{ pauseBtn.disabled=false; backBtn.disabled=false; });
+
+// nosleep: try to keep screen awake (while in foreground) using Wake Lock API
+let wakeLock = null;
+async function requestWakeLock(){
+  try{
+    if('wakeLock' in navigator && startBtn.disabled){
+      wakeLock = await navigator.wakeLock.request('screen');
+    }
+  }catch(e){}
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible') requestWakeLock();
+  else if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock=null; }
+});
+</script>
+</body>
+</html>
